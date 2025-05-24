@@ -87,6 +87,40 @@ export default {
       }
     }
     
+    // 新增：从请求头中获取题目题号的API端点
+    if (path === '/api/header-problem' || path === '/api/header-problem/') {
+      // 支持多种可能的头部名称
+      const problemId = request.headers.get('X-Problem-ID') || 
+                       request.headers.get('Problem-ID') || 
+                       request.headers.get('X-Luogu-Problem') ||
+                       request.headers.get('Luogu-Problem-ID');
+      
+      if (!problemId) {
+        return new Response(JSON.stringify({ 
+          error: 'Missing problem ID in request headers. Please provide one of: X-Problem-ID, Problem-ID, X-Luogu-Problem, or Luogu-Problem-ID' 
+        }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+      
+      try {
+        const problemInfo = await getProblemById(problemId.trim());
+        return new Response(JSON.stringify({
+          id: problemId.trim(),
+          source: 'header',
+          ...problemInfo
+        }), {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } catch (error) {
+        return new Response(JSON.stringify({ error: error.message }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+    
     // 返回简单的HTML页面，用于测试
     return new Response(`
       <!DOCTYPE html>
@@ -113,6 +147,7 @@ export default {
           <div class="tabs">
             <div class="tab-button tab-button-active" onclick="switchTab('url-tab', this)">通过URL获取</div>
             <div class="tab-button" onclick="switchTab('id-tab', this)">通过题号获取</div>
+            <div class="tab-button" onclick="switchTab('header-tab', this)">通过请求头获取</div>
             <div class="tab-button" onclick="switchTab('mcp-tab', this)">MCP接口测试</div>
           </div>
           
@@ -126,6 +161,25 @@ export default {
             <p>输入洛谷题号，例如: P1006</p>
             <input id="problemId" placeholder="P1006" />
             <button onclick="fetchProblemById()">获取题目</button>
+          </div>
+          
+          <div id="header-tab" class="tab">
+            <p>通过请求头获取题目 (GET /api/header-problem)</p>
+            <p>输入洛谷题号，将通过请求头发送:</p>
+            <input id="headerProblemId" placeholder="P1006" />
+            <label>
+              <input type="radio" name="headerType" value="X-Problem-ID" checked /> X-Problem-ID
+            </label>
+            <label>
+              <input type="radio" name="headerType" value="Problem-ID" /> Problem-ID
+            </label>
+            <label>
+              <input type="radio" name="headerType" value="X-Luogu-Problem" /> X-Luogu-Problem
+            </label>
+            <label>
+              <input type="radio" name="headerType" value="Luogu-Problem-ID" /> Luogu-Problem-ID
+            </label>
+            <button onclick="fetchProblemByHeader()">获取题目</button>
           </div>
           
           <div id="mcp-tab" class="tab">
@@ -193,6 +247,30 @@ export default {
               try {
                 resultElement.textContent = '加载中...';
                 const response = await fetch(\`/api/problem/\${id}\`);
+                const data = await response.json();
+                resultElement.textContent = JSON.stringify(data, null, 2);
+              } catch (error) {
+                resultElement.textContent = JSON.stringify({ error: error.message }, null, 2);
+              }
+            }
+            
+            async function fetchProblemByHeader() {
+              const id = document.getElementById('headerProblemId').value;
+              const headerType = document.querySelector('input[name="headerType"]:checked').value;
+              const resultElement = document.getElementById('json');
+              
+              try {
+                resultElement.textContent = '加载中...';
+                const headers = {
+                  'Content-Type': 'application/json'
+                };
+                headers[headerType] = id;
+                
+                const response = await fetch('/api/header-problem', {
+                  method: 'GET',
+                  headers: headers
+                });
+                
                 const data = await response.json();
                 resultElement.textContent = JSON.stringify(data, null, 2);
               } catch (error) {
