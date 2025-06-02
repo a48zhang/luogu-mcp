@@ -1,0 +1,200 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Luogu MCP Server API",
+    "description": "A Cloudflare Workers-based API that provides Model Context Protocol (MCP) support and multiple endpoints for retrieving Luogu problem details. Supports fetching problems by URL, problem ID, or request headers.",
+    "version": "0.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://workers-playground-steep-brook-cdfb.alphazhang689.workers.dev/",
+      "description": "Production server"
+    }
+  ],
+  "paths": {
+    "api/fetch": {
+      "get": {
+        "summary": "Fetch problem by URL",
+        "description": "Retrieve Luogu problem content by providing the full problem URL",
+        "operationId": "fetchProblemByUrl",
+        "parameters": [
+          {
+            "name": "url",
+            "in": "query",
+            "description": "The full Luogu problem URL (e.g. https://www.luogu.com.cn/problem/P1001)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://www\\.luogu\\.com\\.cn/problem/P\\d+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Problem details response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LuoguProblemResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid or missing problem URL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "api/problem/{problemId}": {
+      "get": {
+        "summary": "Get problem by ID",
+        "description": "Get Luogu problem content by problem ID (e.g. P1001)",
+        "operationId": "getProblemById",
+        "parameters": [
+          {
+            "name": "problemId",
+            "in": "path",
+            "description": "The problem ID to retrieve (e.g. P1001)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^P\\d+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Problem details response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LuoguProblem"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "LuoguProblem": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "Problem title",
+            "example": "A+B Problem"
+          },
+          "difficultyNum": {
+            "type": "integer",
+            "description": "Numeric difficulty level (1-7)",
+            "minimum": 1,
+            "maximum": 7,
+            "example": 1
+          },
+          "difficulty": {
+            "type": "string",
+            "description": "Text description of difficulty level",
+            "example": "入门"
+          },
+          "tags": {
+            "type": "array",
+            "description": "Array of problem tags",
+            "items": {
+              "type": "string"
+            },
+            "example": ["模拟", "入门"]
+          },
+          "description": {
+            "type": "string",
+            "description": "Problem description",
+            "example": "输入两个整数a,b，输出它们的和..."
+          },
+          "inputFormat": {
+            "type": "string",
+            "description": "Input format description",
+            "example": "一行，包含两个整数a,b，中间用单个空格隔开"
+          },
+          "outputFormat": {
+            "type": "string",
+            "description": "Output format description", 
+            "example": "一行，包含一个整数，即a+b的值"
+          },
+          "samples": {
+            "type": "array",
+            "description": "Array of sample input/output pairs",
+            "items": {
+              "$ref": "#/components/schemas/Sample"
+            }
+          },
+          "limit": {
+            "type": "string",
+            "description": "Problem constraints and limits",
+            "example": "-10^9 <= a,b <= 10^9"
+          }
+        },
+        "required": ["title", "difficulty", "description"]
+      },
+      "LuoguProblemResponse": {
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Problem ID",
+                "example": "P1001"
+              },
+              "source": {
+                "type": "string",
+                "description": "Source of the data",
+                "example": "luogu"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Original problem URL",
+                "example": "https://www.luogu.com.cn/problem/P1001"
+              }
+            },
+            "required": ["id", "source", "url"]
+          },
+          {
+            "$ref": "#/components/schemas/LuoguProblem"
+          }
+        ]
+      }
+    }
+  }
+}

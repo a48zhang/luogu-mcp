@@ -2,6 +2,8 @@
 
 洛谷题目 MCP (Model Context Protocol) 服务是一个用于抓取和转换洛谷编程题目信息的服务，可用于与各种编程学习工具和AI助手集成，提供结构化的题目数据。
 
+[Try it.](https://workers-playground-steep-brook-cdfb.alphazhang689.workers.dev/)
+
 ## API接口
 
 ### MCP接口
