@@ -5,18 +5,15 @@
  */
 function cleanString(str) {
   if (!str) return '';
-  // 先移除HTML标签
-  const withoutHtml = str.replace(/<[^>]+>/g, '');
-  // 移除多余空格：
-  // 1. 替换连续的空白字符为单个空格
-  // 2. 移除开头和结尾的空白
-  // 3. 将多行的空格替换为单个换行符
-  return withoutHtml
-    .replace(/\s+/g, ' ')      // 替换连续空白为单个空格
-    .replace(/\n\s+/g, '\n')   // 移除每行开头的空白
-    .replace(/\s+\n/g, '\n')   // 移除每行结尾的空白
-    .replace(/\n+/g, '\n')     // 替换多个换行为单个换行
-    .trim();                   // 移除整个字符串首尾的空白
+  // Remove HTML tags (both complete `<tag ...>` and truncated `<tag...` with no closing `>`)
+  // in a single pass. The pattern only matches `<` followed by a letter/`/`/`!` so that
+  // bare `<` operators in maths (e.g. "a < b") are preserved.
+  const text = str.replace(/<[A-Za-z/!][^>]*>?/g, '');
+  return text
+    .replace(/[ \t]+/g, ' ')      // 合并同行连续空格/Tab
+    .replace(/^ +| +$/gm, '')     // 移除每行行首行尾空格
+    .replace(/\n{3,}/g, '\n\n')   // 最多保留两个连续换行
+    .trim();                      // 移除整个字符串首尾空白
 }
 
 /**
