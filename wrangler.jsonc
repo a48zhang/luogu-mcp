@@ -4,9 +4,13 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "workers-playground-steep-brook-cdfb", // Replace with your Worker name
+	"name": "luogu-mcp",
 	"main": "src/index.js",
 	"compatibility_date": "2025-04-16",
+	"alias": {
+		"ajv": "./src/stubs/ajv.js",
+		"ajv-formats": "./src/stubs/ajv-formats.js"
+	},
 	"observability": {
 		"enabled": true
 	}
