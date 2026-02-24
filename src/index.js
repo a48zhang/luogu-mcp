@@ -78,44 +78,46 @@ const FRONTEND_HTML = `<!DOCTYPE html>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --primary: #0e9de5;
-      --primary-dark: #0a7cb8;
-      --accent: #fe4365;
-      --bg: #f0f4f8;
+      --primary: #2563eb;
+      --primary-dark: #1e40af;
+      --accent: #06b6d4;
+      --bg: #f7fafc;
       --card-bg: #ffffff;
-      --text: #1a2533;
-      --text-muted: #6b7a8d;
-      --border: #dde3ec;
-      --code-bg: #1e2a3a;
-      --code-text: #e2eaf5;
-      --radius: 12px;
-      --shadow: 0 2px 16px rgba(0,0,0,.08);
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --border: #e6eef8;
+      --code-bg: #0f172a;
+      --code-text: #e6eef8;
+      --radius: 14px;
+      --shadow: 0 6px 24px rgba(15,23,42,.06);
     }
 
     body {
-      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
 
     /* ── Header ── */
     header {
-      background: linear-gradient(135deg, #0e9de5 0%, #005fa3 100%);
-      color: #fff;
-      padding: 32px 24px 28px;
+      background: linear-gradient(180deg, rgba(37,99,235,0.08), transparent 60%);
+      color: var(--text);
+      padding: 28px 18px;
       text-align: center;
     }
-    header h1 { font-size: 2rem; font-weight: 700; letter-spacing: -.5px; }
-    header p  { margin-top: 8px; font-size: .95rem; opacity: .85; }
+    header h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.3px; }
+    header p  { margin-top: 6px; font-size: .92rem; color: var(--text-muted); }
 
     /* ── Layout ── */
     main {
-      max-width: 900px;
+      max-width: 980px;
       margin: 0 auto;
-      padding: 32px 16px 64px;
+      padding: 28px 18px 64px;
       display: grid;
-      gap: 24px;
+      gap: 20px;
     }
 
     /* ── Card ── */
@@ -124,24 +126,23 @@ const FRONTEND_HTML = `<!DOCTYPE html>
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       overflow: hidden;
+      border: 1px solid var(--border);
     }
     .card-header {
-      padding: 16px 20px;
+      padding: 14px 18px;
       border-bottom: 1px solid var(--border);
       font-weight: 600;
       font-size: .95rem;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
     .card-header .icon {
       width: 22px; height: 22px;
-      background: var(--primary);
-      border-radius: 6px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
+      background: linear-gradient(90deg, var(--primary), var(--accent));
       color: #fff;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 6px;
       font-size: .75rem;
     }
     .card-body { padding: 20px; }
@@ -185,19 +186,20 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 
     /* ── Button ── */
     .btn {
-      padding: 10px 22px;
+      padding: 10px 18px;
       border: none;
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
       font-size: .9rem;
       font-weight: 600;
-      transition: background .15s, transform .1s;
+      transition: transform .06s, box-shadow .12s, background .12s;
+      box-shadow: 0 1px 0 rgba(16,24,40,0.02);
     }
-    .btn:active { transform: scale(.97); }
-    .btn-primary { background: var(--primary); color: #fff; }
+    .btn:active { transform: translateY(1px) scale(.995); }
+    .btn-primary { background: var(--primary); color: #fff; box-shadow: 0 6px 18px rgba(37,99,235,.12); }
     .btn-primary:hover { background: var(--primary-dark); }
-    .btn-ghost  { background: var(--border); color: var(--text); margin-right: 6px; }
-    .btn-ghost:hover { background: #c5cdd8; }
+    .btn-ghost  { background: transparent; color: var(--primary); margin-right: 6px; border: 1px solid var(--border); }
+    .btn-ghost:hover { background: rgba(37,99,235,0.04); }
 
     .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 
@@ -277,7 +279,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 <body>
   <header>
     <h1>🟡 洛谷 MCP 服务</h1>
-    <p>基于 Model Context Protocol (2024-11-05) 的洛谷题目查询服务，运行于 Cloudflare Workers</p>
+    <p>基于 Model Context Protocol (2025-11-25) 的洛谷题目查询服务，运行于 Cloudflare Workers</p>
   </header>
 
   <main>
@@ -425,7 +427,7 @@ const FRONTEND_HTML = `<!DOCTYPE html>
 
     // ── Presets ──
     const PRESETS = {
-      initialize: { jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2024-11-05', clientInfo:{ name:'Test Client', version:'1.0.0' }, capabilities:{} } },
+      initialize: { jsonrpc:'2.0', id:1, method:'initialize', params:{ protocolVersion:'2025-11-25', clientInfo:{ name:'Test Client', version:'1.0.0' }, capabilities:{} } },
       'tools/list': { jsonrpc:'2.0', id:2, method:'tools/list' },
       get_problem:  { jsonrpc:'2.0', id:3, method:'tools/call', params:{ name:'get_problem', arguments:{ problem_id:'P1001' } } },
     };

@@ -1,12 +1,17 @@
 /**
- * MCP服务器实现 - 符合Model Context Protocol标准 (2024-11-05)
- * 提供洛谷题目信息的无状态MCP服务
+ * MCP 服务器实现
+ * 使用官方 @modelcontextprotocol/sdk，符合 MCP 2025-11-25 标准。
+ * 每次请求创建独立的 McpServer + WebStandardStreamableHTTPServerTransport（无状态模式），
+ * 适合 Cloudflare Workers 无持久内存的运行环境。
  */
 
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { CfWorkerJsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/cfworker';
+import { z } from 'zod';
 import { fetchProblemPage } from './fetcher.js';
 import { parseProblemHtml } from './parser.js';
 
-const MCP_PROTOCOL_VERSION = '2024-11-05';
 const SERVER_NAME = 'Luogu MCP Server';
 const SERVER_VERSION = '1.0.0';
 
@@ -14,145 +19,63 @@ const SERVER_VERSION = '1.0.0';
 const PROBLEM_ID_RE = /^[A-Za-z][A-Za-z0-9_]*$/;
 
 /**
- * 处理 MCP HTTP 请求（无状态 JSON-RPC 2.0）
+ * 创建并配置 McpServer 实例（注册所有工具）。
+ * 每次请求调用一次，保证无状态。
+ */
+function createMcpServer() {
+  const server = new McpServer(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    { jsonSchemaValidator: new CfWorkerJsonSchemaValidator() },
+  );
+
+  server.tool(
+    'get_problem',
+    '根据题目编号获取洛谷题目详细信息，包括题面、输入输出格式、样例、数据范围等。',
+    { problem_id: z.string().describe('洛谷题目编号，如 P1001、B2002、CF1234A、AT_abc123_a') },
+    { title: '获取洛谷题目', readOnlyHint: true, openWorldHint: true },
+    async ({ problem_id }) => {
+      if (!PROBLEM_ID_RE.test(problem_id)) {
+        return {
+          isError: true,
+          content: [{
+            type: 'text',
+            text: `题目编号格式无效: ${problem_id}。请使用合法的洛谷题目编号，如 P1001、B2002、CF1234A、AT_abc123_a。`,
+          }],
+        };
+      }
+
+      const url = `https://www.luogu.com.cn/problem/${problem_id}`;
+      const html = await fetchProblemPage(url);
+      const info = parseProblemHtml(html);
+
+      return {
+        content: [{ type: 'text', text: formatProblemText({ id: problem_id, url, ...info }) }],
+      };
+    },
+  );
+
+  return server;
+}
+
+/**
+ * 处理 MCP HTTP 请求（无状态，每次请求独立）。
  * @param {Request} request
  * @returns {Promise<Response>}
  */
 export async function handleMcpRequest(request) {
-  const contentType = request.headers.get('Content-Type') ?? '';
-  if (!contentType.includes('application/json')) {
-    return jsonRpcError(null, -32700, 'Content-Type must be application/json');
-  }
-
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return jsonRpcError(null, -32700, 'Parse error: invalid JSON');
-  }
-
-  if (!isValidJsonRpc(body)) {
-    return jsonRpcError(null, -32600, 'Invalid Request: not a valid JSON-RPC 2.0 request');
-  }
-
-  const { id = null, method, params } = body;
-
-  switch (method) {
-    case 'initialize':
-      return handleInitialize(id, params);
-
-    case 'initialized':
-      // Notification — no response body required
-      return new Response(null, { status: 204 });
-
-    case 'ping':
-      return jsonRpcResult(id, {});
-
-    case 'tools/list':
-      return handleToolsList(id);
-
-    case 'tools/call':
-      return handleToolsCall(id, params);
-
-    default:
-      return jsonRpcError(id, -32601, `Method not found: ${method}`);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Method handlers
-// ---------------------------------------------------------------------------
-
-function handleInitialize(id, _params) {
-  // Accept any client protocol version; always respond with the server's own version.
-
-  return jsonRpcResult(id, {
-    protocolVersion: MCP_PROTOCOL_VERSION,
-    serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
-    capabilities: {
-      tools: { listChanged: false },
-    },
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined, // 禁用 session 管理 = 无状态模式
   });
-}
 
-function handleToolsList(id) {
-  return jsonRpcResult(id, {
-    tools: [
-      {
-        name: 'get_problem',
-        description: '根据题目编号获取洛谷题目详细信息，包括题面、输入输出格式、样例、数据范围等。',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            problem_id: {
-              type: 'string',
-              description: '洛谷题目编号，如 P1001、B2002、CF1234A、AT_abc123_a',
-            },
-          },
-          required: ['problem_id'],
-        },
-        annotations: {
-          title: '获取洛谷题目',
-          readOnlyHint: true,
-          openWorldHint: true,
-        },
-      },
-    ],
-  });
-}
-
-async function handleToolsCall(id, params) {
-  const { name, arguments: args } = params ?? {};
-
-  if (!name) {
-    return jsonRpcError(id, -32602, 'Invalid params: missing tool name');
-  }
-
-  try {
-    if (name === 'get_problem') {
-      return jsonRpcResult(id, await toolGetProblem(args));
-    }
-    return jsonRpcError(id, -32601, `Tool not found: ${name}`);
-  } catch (err) {
-    return jsonRpcResult(id, {
-      isError: true,
-      content: [{ type: 'text', text: `Error executing tool ${name}: ${err.message}` }],
-    });
-  }
+  const server = createMcpServer();
+  await server.connect(transport);
+  return transport.handleRequest(request);
 }
 
 // ---------------------------------------------------------------------------
-// Tool implementations
+// Markdown 格式化
 // ---------------------------------------------------------------------------
 
-async function toolGetProblem(args) {
-  const problemId = args?.problem_id;
-
-  if (!problemId) {
-    return errorContent('缺少必要参数: problem_id');
-  }
-
-  if (!PROBLEM_ID_RE.test(problemId)) {
-    return errorContent(
-      `题目编号格式无效: ${problemId}。` +
-        '请使用合法的洛谷题目编号，如 P1001、B2002、CF1234A、AT_abc123_a。',
-    );
-  }
-
-  const url = `https://www.luogu.com.cn/problem/${problemId}`;
-  const html = await fetchProblemPage(url);
-  const info = parseProblemHtml(html);
-
-  const text = formatProblemText({ id: problemId, url, ...info });
-
-  return {
-    content: [{ type: 'text', text }],
-  };
-}
-
-/**
- * 将题目信息格式化为可读 Markdown 文本
- */
 function formatProblemText({ id, url, title, difficulty, tags, description, inputFormat, outputFormat, samples, limit }) {
   const lines = [];
   lines.push(`# ${id} ${title}`);
@@ -194,39 +117,7 @@ function formatProblemText({ id, url, title, difficulty, tags, description, inpu
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function errorContent(text) {
-  return { isError: true, content: [{ type: 'text', text }] };
-}
-
-function isValidJsonRpc(obj) {
-  return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    obj.jsonrpc === '2.0' &&
-    typeof obj.method === 'string' &&
-    (obj.id === undefined || obj.id === null || typeof obj.id === 'string' || typeof obj.id === 'number')
-  );
-}
-
-function jsonRpcResult(id, result) {
-  return new Response(JSON.stringify({ jsonrpc: '2.0', id, result }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-function jsonRpcError(id, code, message) {
-  return new Response(JSON.stringify({ jsonrpc: '2.0', id, error: { code, message } }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Direct API helper (used by /api/problem/:id route)
+// Direct API helper（供 /api/problem/:id 路由使用）
 // ---------------------------------------------------------------------------
 
 export async function getProblemById(problemId) {

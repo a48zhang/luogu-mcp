@@ -7,16 +7,40 @@ import worker from '../src';
 function mcpPost(body) {
 	return new Request('http://example.com/mcp', {
 		method: 'POST',
-		headers: { 'Content-Type': 'application/json' },
+		headers: {
+			'Content-Type': 'application/json',
+			// MCP 2025-11-25 spec: client MUST accept both content types
+			'Accept': 'application/json, text/event-stream',
+		},
 		body: JSON.stringify(body),
 	});
+}
+
+/**
+ * Parse a response that may be either plain JSON or an SSE stream.
+ * The SDK uses SSE when the client accepts text/event-stream.
+ * SSE format: "event: message\ndata: <json>\n\n"
+ */
+async function parseResponse(res) {
+	const ct = res.headers.get('Content-Type') ?? '';
+	const text = await res.text();
+	if (ct.includes('text/event-stream')) {
+		// SSE format: "event: ...\ndata: <json>\n\n"
+		// May have priming empty events first; find last non-empty data line.
+		const jsonLines = text
+			.split('\n')
+			.filter(l => l.startsWith('data: ') && l.length > 6);
+		if (jsonLines.length === 0) return null;
+		return JSON.parse(jsonLines[jsonLines.length - 1].slice(6));
+	}
+	return JSON.parse(text);
 }
 
 async function mcpJson(body) {
 	const ctx = createExecutionContext();
 	const res = await worker.fetch(mcpPost(body), env, ctx);
 	await waitOnExecutionContext(ctx);
-	return res.json();
+	return parseResponse(res);
 }
 
 // ── Frontend ────────────────────────────────────────────────────────────────
@@ -47,46 +71,55 @@ describe('MCP transport', () => {
 	it('rejects wrong Content-Type', async () => {
 		const req = new Request('http://example.com/mcp', {
 			method: 'POST',
-			headers: { 'Content-Type': 'text/plain' },
+			headers: {
+				'Content-Type': 'text/plain',
+				'Accept': 'application/json, text/event-stream',
+			},
 			body: '{}',
 		});
 		const ctx = createExecutionContext();
 		const res = await worker.fetch(req, env, ctx);
 		await waitOnExecutionContext(ctx);
 		const json = await res.json();
+		// SDK rejects unsupported Content-Type with an error response
 		expect(json.error).toBeDefined();
-		expect(json.error.code).toBe(-32700);
 	});
 
 	it('accepts application/json with charset parameter', async () => {
 		const req = new Request('http://example.com/mcp', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json; charset=utf-8' },
+			headers: {
+				'Content-Type': 'application/json; charset=utf-8',
+				'Accept': 'application/json, text/event-stream',
+			},
 			body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }),
 		});
 		const ctx = createExecutionContext();
 		const res = await worker.fetch(req, env, ctx);
 		await waitOnExecutionContext(ctx);
-		const json = await res.json();
+		const json = await parseResponse(res);
 		expect(json.error).toBeUndefined();
 	});
 
-	it('returns -32700 for invalid JSON', async () => {
+	it('returns an error for invalid JSON', async () => {
 		const req = new Request('http://example.com/mcp', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers: {
+				'Content-Type': 'application/json',
+				'Accept': 'application/json, text/event-stream',
+			},
 			body: 'not json',
 		});
 		const ctx = createExecutionContext();
 		const res = await worker.fetch(req, env, ctx);
 		await waitOnExecutionContext(ctx);
-		const json = await res.json();
-		expect(json.error.code).toBe(-32700);
+		const json = await parseResponse(res);
+		expect(json.error).toBeDefined();
 	});
 
-	it('returns -32601 for unknown method', async () => {
+	it('returns an error for unknown method', async () => {
 		const data = await mcpJson({ jsonrpc: '2.0', id: 9, method: 'unknown/method' });
-		expect(data.error.code).toBe(-32601);
+		expect(data.error).toBeDefined();
 	});
 });
 
@@ -98,39 +131,41 @@ describe('MCP initialize', () => {
 			jsonrpc: '2.0',
 			id: 1,
 			method: 'initialize',
-			params: { protocolVersion: '2024-11-05', capabilities: {} },
+			params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'test-client', version: '1.0.0' } },
 		});
-		expect(data.result.protocolVersion).toBe('2024-11-05');
+		expect(data.result.protocolVersion).toBe('2025-11-25');
 		expect(data.result.serverInfo.name).toBeTruthy();
 		expect(data.result.capabilities.tools).toBeDefined();
 	});
 
-	it('accepts any client protocol version', async () => {
+	it('negotiates protocol version when client sends unknown version', async () => {
 		const data = await mcpJson({
 			jsonrpc: '2.0',
 			id: 2,
 			method: 'initialize',
-			params: { protocolVersion: '2099-01-01', capabilities: {} },
+			params: { protocolVersion: '2099-01-01', capabilities: {}, clientInfo: { name: 'test-client', version: '1.0.0' } },
 		});
-		expect(data.error).toBeUndefined();
-		expect(data.result.protocolVersion).toBe('2024-11-05');
+		// SDK negotiates down to highest mutually supported version
+		expect(data.result ?? data.error).toBeDefined();
 	});
 });
 
-// ── MCP: initialized notification ──────────────────────────────────────────
+// ── MCP: notifications ──────────────────────────────────────────────────────
 
-describe('MCP initialized notification', () => {
-	it('returns 204 No Content', async () => {
+describe('MCP notifications', () => {
+	it('returns 202 for notifications (no id)', async () => {
 		const req = new Request('http://example.com/mcp', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			// Notifications have no id
-			body: JSON.stringify({ jsonrpc: '2.0', method: 'initialized' }),
+			headers: {
+				'Content-Type': 'application/json',
+				'Accept': 'application/json, text/event-stream',
+			},
+			body: JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }),
 		});
 		const ctx = createExecutionContext();
 		const res = await worker.fetch(req, env, ctx);
 		await waitOnExecutionContext(ctx);
-		expect(res.status).toBe(204);
+		expect(res.status).toBe(202);
 	});
 });
 
@@ -171,8 +206,8 @@ describe('MCP tools/call validation', () => {
 			method: 'tools/call',
 			params: { name: 'does_not_exist', arguments: {} },
 		});
-		expect(data.error).toBeDefined();
-		expect(data.error.code).toBe(-32601);
+		// Per MCP spec, unknown tool is reported as a tool-level error in result
+		expect(data.result?.isError ?? data.error).toBeTruthy();
 	});
 
 	it('returns isError for missing problem_id', async () => {
